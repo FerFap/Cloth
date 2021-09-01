@@ -1,0 +1,118 @@
+import pygame as py
+import numpy as np
+
+class Point:
+    def __init__(self, position, prevPosition, locked):
+        self.prevPosition = prevPosition
+        self.position = position
+        self.locked = locked
+
+class Stick:
+    def __init__(self, p1, p2, length):
+        self.p1 = p1
+        self.p2 = p2
+        self.length = length
+mainClock = py.time.Clock()
+py.init()
+WIDTH = 1280
+HEIGHT = 720
+WHITE = (255, 255, 255)
+RED = (255, 0, 0)
+screen = py.display.set_mode((WIDTH, HEIGHT))
+
+dotsx = 50
+dotsy = 15
+gravity = 0
+SCALE = WIDTH / dotsx
+HITBOXLINE = SCALE / 2
+dt = 1
+ITERATIONS = 1
+SIZEDOTS = 5
+SIZELINE = 2
+PLAATSEN = {}
+
+
+def make_connections(sticks, points):
+
+    def horizontal(sticks, points):
+        for i in range(dotsx):
+            for j in range(dotsy - 1):
+                sticks.add(Stick(points[i][j], points[i][j + 1], 1))
+
+    def vertical(sticks, points):
+        for j in range(dotsy):
+            for i in range(dotsx - 1):
+                sticks.add(Stick(points[i][j], points[i + 1][j], 1))
+
+    vertical(sticks, points)
+    horizontal(sticks, points)
+
+
+def simulate(points, sticks, p, to_remove):
+    removed = []
+    for point in points:
+        if(not point.locked):
+            saved = np.copy(point.position)
+            point.position += point.position - point.prevPosition
+            point.position += np.array([0, 1]) * gravity * dt * dt
+            point.prevPosition = saved
+
+    for _ in range(ITERATIONS):
+        for stick in sticks:
+            stick_center = (stick.p1.position + stick.p2.position) / 2
+            if to_remove and np.linalg.norm((stick_center * SCALE) - p) < HITBOXLINE:
+                removed.append(stick)
+            else:
+                stick_direction = (stick.p1.position - stick.p2.position) / np.linalg.norm(stick.p1.position - stick.p2.position)
+                if(not stick.p1.locked):
+                    stick.p1.position = stick_center + stick_direction * stick.length / 2
+                if (not stick.p2.locked):
+                    stick.p2.position = stick_center - stick_direction * stick.length / 2
+
+    for i in removed:
+        sticks.remove(i)
+
+
+def drawDots(points):
+    for point in points:
+        x, y = point.position
+        py.draw.circle(screen,RED if point.locked else WHITE, (float(x)*SCALE, float(y)*SCALE), SIZEDOTS, 0)
+
+
+def drawLines(sticks):
+    for stick in sticks:
+        py.draw.line(screen, WHITE, (float(stick.p1.position[0])*SCALE, float(stick.p1.position[1])*SCALE), (float(stick.p2.position[0]*SCALE), float(stick.p2.position[1])*SCALE), SIZELINE)
+
+def main():
+    points = [[Point(np.array([float(r), float(c)]), np.array([r, c]), False) for c in range(1, dotsy + 1)] for r in
+              range(dotsx)]
+    sticks = set()
+    global gravity
+    for i in range(0, dotsx, dotsx // 5 - 1):
+        points[i][0].locked = True
+    points[-1][0].locked = True
+    make_connections(sticks, points)
+    points = sum(points, [])
+    drag = False
+    run = True
+    while run:
+        screen.fill((0, 0, 0))
+        simulate(points, sticks, np.array(py.mouse.get_pos()), drag)
+        drawLines(sticks)
+        drawDots(points)
+        for event in py.event.get():
+            if event.type == py.QUIT:
+                run = False
+            if event.type == py.MOUSEBUTTONDOWN:
+                drag = True
+
+            if event.type == py.MOUSEBUTTONUP:
+                drag = False
+
+            if py.key.get_pressed()[py.K_SPACE]:
+                gravity = 0.05
+
+        py.display.update()
+        mainClock.tick(60)
+    py.quit()
+main()
